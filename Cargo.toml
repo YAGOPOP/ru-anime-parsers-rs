@@ -1,0 +1,9 @@
+[package]
+name = "ru-anime-parsers-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+reqwest = {version = "0.13.4", features=["blocking"]}
+scraper = "0.27.0"
