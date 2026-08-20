@@ -237,9 +237,17 @@ impl KodikParserClient {
         Ok(decrypted_link)
     }
     pub fn new() -> Self {
-        Self {
-            reqwest_client: Client::new(),
-        }
+        Self::from_client(Client::new())
+    }
+
+    pub fn from_client(reqwest_client: Client) -> Self {
+        Self { reqwest_client }
+    }
+}
+
+impl Default for KodikParserClient {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
