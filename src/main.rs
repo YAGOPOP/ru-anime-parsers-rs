@@ -1,90 +1,58 @@
-use anyhow;
+mod kodik;
+
+use anyhow::{self, Context, Ok};
+use base64::{Engine as _, engine::general_purpose};
+use dotenvy;
+use kodik_api::Client as KodikClient;
+use kodik_api::search::SearchQuery as KodikSearchQuerry;
+use kodik_api::types::Episode;
+use regex::Regex;
 use reqwest::Client;
 use scraper;
-use scraper::{Html, Selector};
+use scraper::{ElementRef, Html, Selector};
+use serde::{Deserialize, Serialize};
 use tokio;
 use url::Url;
-use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
-struct UrlParams {
-    d: String,
-    d_sign: String,
-    pd: String,
-    pd_sign: String,
-    r#ref: String,
-    ref_sign: String,
-    advert_debug: bool,
-    first_url: bool,
-}
+use std::any::Any;
+use std::collections::HashMap;
+use std::path::Prefix;
+use std::sync::LazyLock;
 
-
-const URL_STRING: &str =
-    // "https://kodikplayer.com/serial/73959/68e2e57cb95f7fb93655637acaca26c2/720p";
-    "https://kodikplayer.com/seria/175152/f0155c810cbacd426ed3df86472445c9/720p";
-    // "https://kodikplayer.com/seria/73993/8cf136c19eef4bc23624d32c0424712e/720p";
-
+use crate::kodik::KodikParserClient;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let url = Url::parse(URL_STRING).unwrap();
+    // dotenvy::dotenv().ok();
+    // let kodik_content_url = Url::parse(KODIK_CONTENT_URL).unwrap();
 
-    // let client = Client::builder().no_proxy().build().unwrap();
-    let client = Client::new();
+    // match kodik_content_url
+    //     .path_segments()
+    //     .context("kodik content url is expected to have path")?
+    //     .next()
+    //     .context("kodik content url path is expected to be not empty")?
+    // {
+    //     "serial" => {
+    //         let translations = document.select(&SERIAL_TRANSLATIONS_SELECTOR);
+    //         let translations = RawTranslationInfo::from_element_refs(translations)?;
+    //     }
+    //     "seria" | "video" => {
+    //         let translations = document.select(&MOVIE_TRANSLATIONS_SELECTOR);
+    //         let translations = RawTranslationInfo::from_element_refs(translations)?;
+    //     }
+    //     v => eprintln!("Unexpected vInfo.type value: `{v}`"),
+    // };
 
+    let kodik_parser_client = KodikParserClient::new();
 
+    let url =
+        Url::parse("https://kodikplayer.com/serial/73959/68e2e57cb95f7fb93655637acaca26c2/720p")?;
 
-    let resp = client
-        .get(url.as_str())
-        .send()
-        .await?;
+    let link = kodik_parser_client.get_episode_manifest(&url, 5).await?;
+    println!("{}", link.as_str());
 
-    let resp_text = resp.text().await?;
-
-
-    let document = Html::parse_document(&resp_text);
-
-    let movie_translations_selector = Selector::parse(".movie-translations-box select option").unwrap();
-    let serial_translations_selector = Selector::parse(".serial-translations-box select option").unwrap();
-    let episodes_selector = Selector::parse(".serial-series-box select option").unwrap();
-
-    let url_params_js_block_selector = Selector::parse(r#"script[type="text/javascript"]"#).unwrap();
-
-    let serial_translations = document.select(&serial_translations_selector);
-    for serial_translation in serial_translations {
-        println!("{:#?}", serial_translation);
-    }
-
-    let movie_translations = document.select(&movie_translations_selector);
-    for movie_translation in movie_translations {
-        println!("{:#?}", movie_translation);
-    }
-
-    let episodes = document.select(&episodes_selector);
-    for episode in episodes {
-        println!("{:#?}", episode);
-    }
-
-    let mut url_params = document.select(&url_params_js_block_selector);
-    let script = url_params.next().unwrap().inner_html();
-    let json = script
-        .lines()
-        .find_map(|line| {
-            line.trim()
-                .strip_prefix("var urlParams = ")
-                .and_then(|s| s.strip_suffix(';'))
-                .and_then(|s| s.strip_prefix('\''))
-                .and_then(|s| s.strip_suffix('\''))
-        })
-        .unwrap();
-
-    // let params: serde_json::Value = serde_json::from_str(json)?;
-    let params: UrlParams = serde_json::from_str(json)?;
-
-
-    println!("{params:#?}");
-
-    // std::fs::write("./test.html", &resp_text).unwrap();
+    let link = kodik_parser_client.get_episode_manifest(&url, 6).await?;
+    println!("{}", link.as_str());
 
     Ok(())
 }
