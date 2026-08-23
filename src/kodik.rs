@@ -84,14 +84,6 @@ impl RawTranslationInfo {
         let el_ref: RawTranslationInfo = serde_json::from_value(el_ref)?;
         Ok(el_ref)
     }
-
-    fn from_element_refs<'a>(
-        el_refs: impl Iterator<Item = ElementRef<'a>>,
-    ) -> anyhow::Result<Vec<Self>> {
-        el_refs
-            .map(|el| Self::from_element_ref(el))
-            .collect::<Result<Vec<_>, _>>()
-    }
 }
 
 
@@ -166,14 +158,6 @@ impl RawEpisodeInfo {
         let el_ref = serde_json::to_value(el_ref)?;
         let el_ref: RawEpisodeInfo = serde_json::from_value(el_ref)?;
         Ok(el_ref)
-    }
-
-    fn from_element_refs<'a>(
-        el_refs: impl Iterator<Item = ElementRef<'a>>,
-    ) -> anyhow::Result<Vec<Self>> {
-        el_refs
-            .map(|el| Self::from_element_ref(el))
-            .collect::<Result<Vec<_>, _>>()
     }
 }
 
