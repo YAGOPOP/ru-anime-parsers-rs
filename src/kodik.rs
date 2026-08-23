@@ -1,4 +1,4 @@
-use anyhow::{self, Context, Ok};
+use anyhow::{self, Context};
 use base64::{Engine as _, engine::general_purpose};
 use regex::Regex;
 use reqwest::Client;
@@ -8,7 +8,11 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use std::collections::HashMap;
+use std::env::var;
 use std::sync::LazyLock;
+use std::vec;
+
+use thiserror::Error;
 
 static CAESAR_SHIFT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"charCodeAt\s*\(\s*0\s*\)\s*\+\s*(\d+)"#).expect("valid caesar shift regex")
@@ -90,6 +94,54 @@ impl RawTranslationInfo {
     }
 }
 
+
+
+#[derive(Debug)]
+struct EpisodeInfo {
+    title: String,
+    hash: String,
+    id: u32,
+    translation_title: Option<String>,
+    selected: bool,
+    number: u32,
+    // other_translation: bool,
+}
+
+#[derive(Debug, Error)]
+enum EpisodeInfoError {
+    #[error("invalid episode id")]
+    InvalidId(#[source] std::num::ParseIntError),
+
+    #[error("invalid episode number")]
+    InvalidNumber(#[source] std::num::ParseIntError),
+
+    #[error("invalid selected value: {0}")]
+    InvalidSelected(String),
+}
+
+impl TryFrom<RawEpisodeInfo> for EpisodeInfo {
+    type Error = EpisodeInfoError;
+
+    fn try_from(value: RawEpisodeInfo) -> Result<Self, Self::Error> {
+        let episode_id = value.id.parse().map_err(Self::Error::InvalidId)?;
+        let episode_number = value.number.parse().map_err(Self::Error::InvalidNumber)?;
+        let selected = match value.selected.as_deref() {
+            Some("selected") => true,
+            None => false,
+            Some(v) => return Err(Self::Error::InvalidSelected(v.to_owned())),
+        };
+
+        Ok(Self {
+            title: value.title,
+            hash: value.hash,
+            id: episode_id,
+            number: episode_number,
+            selected,
+            translation_title: value.translation_title,
+        })
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawEpisodeInfo {
@@ -103,10 +155,9 @@ struct RawEpisodeInfo {
     title: String,
     #[serde(rename = "data-translation-title")]
     translation_title: Option<String>,
-    #[serde(rename = "selected")]
     selected: Option<String>, //bool
     #[serde(rename = "value")]
-    number: String, //bool
+    number: String, //u32
 }
 
 impl RawEpisodeInfo {
