@@ -25,8 +25,8 @@ static KOIDIK_API_BASE_URL: LazyLock<Url> =
 //     LazyLock::new(|| Selector::parse(".serial-translations-box select option").unwrap());
 // static MOVIE_TRANSLATIONS_SELECTOR: LazyLock<Selector> =
 //     LazyLock::new(|| Selector::parse(".movie-translations-box select option").unwrap());
-// static EPISODES_SELECTOR: LazyLock<Selector> =
-//     LazyLock::new(|| Selector::parse(".serial-series-box select option").unwrap());
+static EPISODES_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".serial-series-box select option").unwrap());
 static SCRIPT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("script").unwrap());
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -86,8 +86,6 @@ impl RawTranslationInfo {
     }
 }
 
-
-
 #[derive(Debug)]
 struct EpisodeInfo {
     title: String,
@@ -96,7 +94,7 @@ struct EpisodeInfo {
     translation_title: Option<String>,
     selected: bool,
     number: u32,
-    // other_translation: bool,
+    _other_translation: bool,
 }
 
 #[derive(Debug, Error)]
@@ -107,57 +105,67 @@ enum EpisodeInfoError {
     #[error("invalid episode number")]
     InvalidNumber(#[source] std::num::ParseIntError),
 
-    #[error("invalid selected value: {0}")]
-    InvalidSelected(String),
+    // #[error("invalid selected value: {0}")]
+    // InvalidSelected(String),
+
+    #[error("no data-title attribute in episode tag")]
+    NoTitle,
+
+    #[error("no data-hash attribute in episode tag")]
+    NoHash,
+
+    #[error("no data-id attribute in episode tag")]
+    NoId,
+
+    // #[error("no data-translation-title attribute in episode tag")]
+    // NoTranslationTitle,
+
+    #[error("no value attribute in episode tag")]
+    NoValue,
+
+    #[error("no data-other-translation attribute in episode tag")]
+    NoOtherTranslation,
 }
 
-impl TryFrom<RawEpisodeInfo> for EpisodeInfo {
+impl<'a> TryFrom<ElementRef<'a>> for EpisodeInfo {
     type Error = EpisodeInfoError;
 
-    fn try_from(value: RawEpisodeInfo) -> Result<Self, Self::Error> {
-        let episode_id = value.id.parse().map_err(Self::Error::InvalidId)?;
-        let episode_number = value.number.parse().map_err(Self::Error::InvalidNumber)?;
-        let selected = match value.selected.as_deref() {
-            Some("selected") => true,
-            None => false,
-            Some(v) => return Err(Self::Error::InvalidSelected(v.to_owned())),
+    fn try_from(value: ElementRef) -> Result<Self, Self::Error> {
+        let value = value.value();
+
+        let title = value.attr("data-title").ok_or(Self::Error::NoTitle)?;
+        let hash = value.attr("data-hash").ok_or(Self::Error::NoHash)?;
+        let id = value
+            .attr("data-id")
+            .ok_or(Self::Error::NoId)?
+            .parse::<u32>()
+            .map_err(Self::Error::InvalidId)?;
+        let translation_title = value
+            .attr("data-translation-title").map(str::to_owned);
+        let selected = value.attr("selected").is_some();
+        let number = value
+            .attr("value")
+            .ok_or(Self::Error::NoValue)?
+            .parse::<u32>()
+            .map_err(Self::Error::InvalidNumber)?;
+        let other_translation_text = value
+            .attr("data-other-translation")
+            .ok_or(Self::Error::NoOtherTranslation)?;
+
+        let other_translation = match other_translation_text {
+            "true" => true,
+            "false" => false,
+            _other => false,
         };
-
         Ok(Self {
-            title: value.title,
-            hash: value.hash,
-            id: episode_id,
-            number: episode_number,
+            title: title.to_owned(),
+            hash: hash.to_owned(),
+            id,
+            translation_title,
             selected,
-            translation_title: value.translation_title,
+            number,
+            _other_translation: other_translation
         })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawEpisodeInfo {
-    #[serde(rename = "data-hash")]
-    hash: String,
-    #[serde(rename = "data-other-translation")]
-    other_translation: String, //bool
-    #[serde(rename = "data-id")]
-    id: String, //u32
-    #[serde(rename = "data-title")]
-    title: String,
-    #[serde(rename = "data-translation-title")]
-    translation_title: Option<String>,
-    selected: Option<String>, //bool
-    #[serde(rename = "value")]
-    number: String, //u32
-}
-
-impl RawEpisodeInfo {
-    fn from_element_ref(el_ref: ElementRef) -> anyhow::Result<Self> {
-        let el_ref: HashMap<_, _> = el_ref.value().attrs().collect();
-        let el_ref = serde_json::to_value(el_ref)?;
-        let el_ref: RawEpisodeInfo = serde_json::from_value(el_ref)?;
-        Ok(el_ref)
     }
 }
 
@@ -266,7 +274,11 @@ impl KodikParserClient {
 
         let decrypted_link = link.decrypt(caesar_shift)?;
 
-        // let episodes = document.select(&EPISODES_SELECTOR);
+        let episodes = document.select(&EPISODES_SELECTOR);
+        for ep in episodes{
+            let ep: EpisodeInfo = ep.try_into()?;
+            dbg!(ep);
+        }
         // let episodes = RawEpisodeInfo::from_element_refs(episodes)?;
 
         Ok(decrypted_link)
