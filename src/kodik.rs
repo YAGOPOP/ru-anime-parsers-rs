@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use std::collections::HashMap;
-use std::env::var;
 use std::sync::LazyLock;
-use std::vec;
 
 use thiserror::Error;
 
@@ -21,29 +19,13 @@ static CAESAR_SHIFT_RE: LazyLock<Regex> = LazyLock::new(|| {
 static KOIDIK_API_BASE_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://kodikplayer.com").unwrap());
 
-// static SERIAL_TRANSLATIONS_SELECTOR: LazyLock<Selector> =
-//     LazyLock::new(|| Selector::parse(".serial-translations-box select option").unwrap());
-// static MOVIE_TRANSLATIONS_SELECTOR: LazyLock<Selector> =
-//     LazyLock::new(|| Selector::parse(".movie-translations-box select option").unwrap());
-static EPISODES_SELECTOR: LazyLock<Selector> =
+static _SERIAL_TRANSLATIONS_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".serial-translations-box select option").unwrap());
+static _MOVIE_TRANSLATIONS_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".movie-translations-box select option").unwrap());
+static _EPISODES_SELECTOR: LazyLock<Selector> =
     LazyLock::new(|| Selector::parse(".serial-series-box select option").unwrap());
 static SCRIPT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("script").unwrap());
-
-#[derive(Debug, Deserialize, Serialize)]
-struct UrlParams {
-    #[serde(rename = "d")]
-    domain: String,
-    #[serde(rename = "d_sign")]
-    domain_sign: String,
-    #[serde(rename = "pd")]
-    parent_domain: String,
-    #[serde(rename = "pd_sign")]
-    parent_domain_sign: String,
-    #[serde(rename = "ref")]
-    referer: String,
-    #[serde(rename = "ref_sign")]
-    referer_sign: String,
-}
 
 #[derive(Debug, Serialize)]
 enum MediaType {
@@ -56,33 +38,123 @@ enum MediaType {
 enum TranslationType {
     Voice,
     Subtitles,
+    Other(String),
 }
 
-#[derive(Debug, Deserialize)]
-struct RawTranslationInfo {
-    #[serde(rename = "data-episode-count")]
-    episode_count: Option<String>, //u32
-    #[serde(rename = "data-id")]
-    id: String, //u32
-    #[serde(rename = "data-media-hash")]
-    media_hash: String,
-    #[serde(rename = "data-media-id")]
-    media_id: String, //u32
-    #[serde(rename = "data-media-type")]
-    media_type: String, //MediaType
-    #[serde(rename = "data-title")]
+#[derive(Debug)]
+struct TranslationInfo {
     title: String,
-    #[serde(rename = "data-translation-type")]
-    translation_type: String, //TranslationType
-    value: String, //u32; == id
+    episode_count: u32,
+    id: u32,
+    media_hash: String,
+    media_id: u32,
+    media_type: MediaType,
+    translation_type: TranslationType,
+    _value: u32, // == id
 }
 
-impl RawTranslationInfo {
-    fn from_element_ref(el_ref: ElementRef) -> anyhow::Result<Self> {
-        let el_ref: HashMap<_, _> = el_ref.value().attrs().collect();
-        let el_ref = serde_json::to_value(el_ref)?;
-        let el_ref: RawTranslationInfo = serde_json::from_value(el_ref)?;
-        Ok(el_ref)
+#[derive(Debug, Error)]
+enum TranslationInfoError {
+    #[error("no data-title attribute in translation tag")]
+    NoTitle,
+
+    #[error("no data-episode-count attribute in translation tag")]
+    NoEpisodeCount,
+
+    #[error("invalid episode count")]
+    InvalidEpisodeCount(#[source] std::num::ParseIntError),
+
+    #[error("no data-id attribute in translation tag")]
+    NoId,
+
+    #[error("invalid translation id")]
+    InvalidId(#[source] std::num::ParseIntError),
+
+    #[error("no data-media-hash attribute in translation tag")]
+    NoMediaHash,
+
+    #[error("no data-media-id attribute in translation tag")]
+    NoMediaId,
+
+    #[error("invalid translation media_id")]
+    InvalidMediaId(#[source] std::num::ParseIntError),
+
+    #[error("no data-media-type attribute in translation tag")]
+    NoMediaType,
+
+    #[error("no data-translation-type attribute in translation tag")]
+    NoTranslationType,
+
+    #[error("no value attribute in translation tag")]
+    NoValue,
+
+    #[error("invalid translation value")]
+    InvalidValue(#[source] std::num::ParseIntError),
+
+    #[error("value and id not match")]
+    ValueAndIdNotMatch,
+}
+
+impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
+    type Error = TranslationInfoError;
+
+    fn try_from(element: ElementRef<'a>) -> Result<Self, Self::Error> {
+        let value = element.value();
+
+        let title = value.attr("data-title").ok_or(Self::Error::NoTitle)?;
+        let episode_count = value
+            .attr("data-episode-count")
+            .ok_or(Self::Error::NoEpisodeCount)?
+            .parse::<u32>()
+            .map_err(Self::Error::InvalidEpisodeCount)?;
+        let id = value
+            .attr("data-id")
+            .ok_or(Self::Error::NoId)?
+            .parse::<u32>()
+            .map_err(Self::Error::InvalidId)?;
+        let media_hash = value
+            .attr("data-media-hash")
+            .ok_or(Self::Error::NoMediaHash)?;
+        let media_id = value
+            .attr("data-media-id")
+            .ok_or(Self::Error::NoMediaId)?
+            .parse::<u32>()
+            .map_err(Self::Error::InvalidMediaId)?;
+        let media_type_text = value
+            .attr("data-media-type")
+            .ok_or(Self::Error::NoMediaType)?;
+        let media_type = match media_type_text {
+            "serial" => MediaType::Serial,
+            "video" => MediaType::Video,
+            v => MediaType::Other(v.to_owned()),
+        };
+        let translation_type_text = value
+            .attr("data-translation-type")
+            .ok_or(Self::Error::NoTranslationType)?;
+        let translation_type = match translation_type_text {
+            "voice" => TranslationType::Voice,
+            "subtitles" => TranslationType::Subtitles,
+            v => TranslationType::Other(v.to_owned()),
+        };
+        let value_a = value
+            .attr("value")
+            .ok_or(Self::Error::NoValue)?
+            .parse::<u32>()
+            .map_err(Self::Error::InvalidValue)?;
+
+        if value_a != id {
+            return Err(Self::Error::ValueAndIdNotMatch);
+        }
+        Ok(Self {
+            title: title.to_owned(),
+            episode_count,
+            id,
+            media_hash: media_hash.to_owned(),
+            media_id,
+            media_type,
+            translation_type,
+            _value: value_a,
+        })
     }
 }
 
@@ -130,8 +202,8 @@ enum EpisodeInfoError {
 impl<'a> TryFrom<ElementRef<'a>> for EpisodeInfo {
     type Error = EpisodeInfoError;
 
-    fn try_from(value: ElementRef) -> Result<Self, Self::Error> {
-        let value = value.value();
+    fn try_from(element: ElementRef<'a>) -> Result<Self, Self::Error> {
+        let value = element.value();
 
         let title = value.attr("data-title").ok_or(Self::Error::NoTitle)?;
         let hash = value.attr("data-hash").ok_or(Self::Error::NoHash)?;
@@ -140,8 +212,7 @@ impl<'a> TryFrom<ElementRef<'a>> for EpisodeInfo {
             .ok_or(Self::Error::NoId)?
             .parse::<u32>()
             .map_err(Self::Error::InvalidId)?;
-        let translation_title = value
-            .attr("data-translation-title").map(str::to_owned);
+        let translation_title = value.attr("data-translation-title").map(str::to_owned);
         let selected = value.attr("selected").is_some();
         let number = value
             .attr("value")
@@ -164,9 +235,25 @@ impl<'a> TryFrom<ElementRef<'a>> for EpisodeInfo {
             translation_title,
             selected,
             number,
-            _other_translation: other_translation
+            _other_translation: other_translation,
         })
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct UrlParams {
+    #[serde(rename = "d")]
+    domain: String,
+    #[serde(rename = "d_sign")]
+    domain_sign: String,
+    #[serde(rename = "pd")]
+    parent_domain: String,
+    #[serde(rename = "pd_sign")]
+    parent_domain_sign: String,
+    #[serde(rename = "ref")]
+    referer: String,
+    #[serde(rename = "ref_sign")]
+    referer_sign: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -273,13 +360,6 @@ impl KodikParserClient {
             extract_caesar_shift(&serial_script).context("caesar shift not extracted")?;
 
         let decrypted_link = link.decrypt(caesar_shift)?;
-
-        let episodes = document.select(&EPISODES_SELECTOR);
-        for ep in episodes{
-            let ep: EpisodeInfo = ep.try_into()?;
-            dbg!(ep);
-        }
-        // let episodes = RawEpisodeInfo::from_element_refs(episodes)?;
 
         Ok(decrypted_link)
     }
