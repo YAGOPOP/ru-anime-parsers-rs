@@ -742,7 +742,7 @@ dependencies = [
 [[package]]
 name = "kodik-api"
 version = "0.4.0"
-source = "git+https://github.com/YAGOPOP/kodik-api-rust?rev=d60da0e#d60da0ee81f0fa0721a1481d556a09e0ebb8ea5a"
+source = "git+https://github.com/YAGOPOP/kodik-api-rust?rev=da4b7b6d05205bd30ac0195e1e44c759be4eed01#da4b7b6d05205bd30ac0195e1e44c759be4eed01"
 dependencies = [
  "async-fn-stream",
  "comma_serde_urlencoded",

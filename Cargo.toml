@@ -12,7 +12,8 @@ dotenvy = "0.15.7"
 kodik-api = {
     git = "https://github.com/YAGOPOP/kodik-api-rust",
     # branch = "feat/get-player",
-    rev = "d60da0e"
+    rev = "da4b7b6d05205bd30ac0195e1e44c759be4eed01"
+    # rev = "d60da0e"
 }
 regex = "1.13.1"
 reqwest = {version = "0.13.4", features=["form"]}
