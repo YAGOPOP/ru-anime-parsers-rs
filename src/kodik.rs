@@ -3,6 +3,7 @@ use base64::{Engine as _, engine::general_purpose};
 use regex::Regex;
 use reqwest::Client;
 use scraper;
+use scraper::Node::Document;
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -28,17 +29,47 @@ static _EPISODES_SELECTOR: LazyLock<Selector> =
 static SCRIPT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("script").unwrap());
 
 #[derive(Debug, Serialize)]
-enum MediaType {
+pub enum MediaType {
     Serial(u32),
     Video,
     Other(String),
 }
 
+impl MediaType {
+    pub fn parse(
+        media_type: &str,
+        episode_count: Option<&str>,
+    ) -> Result<Self, TranslationInfoError> {
+        match media_type {
+            "serial" => {
+                let count = episode_count
+                    .ok_or(TranslationInfoError::NoEpisodeCount)?
+                    .parse()
+                    .map_err(TranslationInfoError::InvalidEpisodeCount)?;
+
+                Ok(Self::Serial(count))
+            }
+            "video" => Ok(Self::Video),
+            other => Ok(Self::Other(other.to_owned())),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
-enum TranslationType {
+pub enum TranslationType {
     Voice,
     Subtitles,
     Other(String),
+}
+
+impl From<&str> for TranslationType {
+    fn from(value: &str) -> Self {
+        match value {
+            "voice" => Self::Voice,
+            "subtitles" => Self::Subtitles,
+            other => Self::Other(other.to_owned()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -49,7 +80,7 @@ struct TranslationInfo {
     media_id: u32,
     media_type: MediaType,
     translation_type: TranslationType,
-    _value: u32, // == id
+    selected: bool,
 }
 
 #[derive(Debug, Error)]
@@ -91,7 +122,7 @@ enum TranslationInfoError {
     InvalidValue(#[source] std::num::ParseIntError),
 
     #[error("value and id not match")]
-    ValueAndIdNotMatch,
+    ValueAndIdNotMatch{value: u32, id: u32},
 }
 
 impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
@@ -115,37 +146,24 @@ impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
             .ok_or(Self::Error::NoMediaId)?
             .parse::<u32>()
             .map_err(Self::Error::InvalidMediaId)?;
-        let media_type_text = value
-            .attr("data-media-type")
-            .ok_or(Self::Error::NoMediaType)?;
-        let media_type = match media_type_text {
-            "serial" => {
-                let episode_count = value
-                    .attr("data-episode-count")
-                    .ok_or(Self::Error::NoEpisodeCount)?
-                    .parse::<u32>()
-                    .map_err(Self::Error::InvalidEpisodeCount)?;
-                MediaType::Serial(episode_count)
-            },
-            "video" => MediaType::Video,
-            v => MediaType::Other(v.to_owned()),
-        };
-        let translation_type_text = value
+        let media_type = MediaType::parse(
+            value
+                .attr("data-media-type")
+                .ok_or(Self::Error::NoMediaType)?,
+            value.attr("data-episode-count"),
+        )?;
+        let translation_type = value
             .attr("data-translation-type")
-            .ok_or(Self::Error::NoTranslationType)?;
-        let translation_type = match translation_type_text {
-            "voice" => TranslationType::Voice,
-            "subtitles" => TranslationType::Subtitles,
-            v => TranslationType::Other(v.to_owned()),
-        };
-        let value_a = value
+            .ok_or(Self::Error::NoTranslationType)?.into();
+        let selected = value.attr("selected").is_some();
+        let value_attr = value
             .attr("value")
             .ok_or(Self::Error::NoValue)?
             .parse::<u32>()
             .map_err(Self::Error::InvalidValue)?;
 
-        if value_a != id {
-            return Err(Self::Error::ValueAndIdNotMatch);
+        if value_attr != id {
+            return Err(Self::Error::ValueAndIdNotMatch{value: value_attr, id});
         }
         Ok(Self {
             title: title.to_owned(),
@@ -154,7 +172,7 @@ impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
             media_id,
             media_type,
             translation_type,
-            _value: value_a,
+            selected,
         })
     }
 }
@@ -302,6 +320,25 @@ impl KodikParserClient {
         let page_resp = client.get(url.as_str()).send().await?.error_for_status()?;
         let page_resp_text = page_resp.text().await?;
         let document = Html::parse_document(&page_resp_text);
+
+        // let translation_tags = document.select(&_SERIAL_TRANSLATIONS_SELECTOR);
+        // let translation = translation_tags
+        //     .map(TranslationInfo::try_from)
+        //     .filter(|r| match r {
+        //         Ok(v) => v.selected,
+        //         Err(_) => false,
+        //     })
+        //     .collect::<Result<Vec<_>, _>>()?;
+
+        // if let Some(tr) = translation.get(0) {
+        //     if let MediaType::Serial(ep_count) = tr.media_type {
+        //         if ep_count < episode_number {
+        //             anyhow::bail!(
+        //                 "provided episode number excedits amount of episodes in selected translation"
+        //             );
+        //         }
+        //     }
+        // }
 
         let script_tags: Vec<_> = document.select(&SCRIPT_SELECTOR).collect();
 
