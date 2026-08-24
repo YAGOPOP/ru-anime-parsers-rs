@@ -29,7 +29,7 @@ static SCRIPT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("s
 
 #[derive(Debug, Serialize)]
 enum MediaType {
-    Serial,
+    Serial(u32),
     Video,
     Other(String),
 }
@@ -44,7 +44,6 @@ enum TranslationType {
 #[derive(Debug)]
 struct TranslationInfo {
     title: String,
-    episode_count: u32,
     id: u32,
     media_hash: String,
     media_id: u32,
@@ -57,9 +56,6 @@ struct TranslationInfo {
 enum TranslationInfoError {
     #[error("no data-title attribute in translation tag")]
     NoTitle,
-
-    #[error("no data-episode-count attribute in translation tag")]
-    NoEpisodeCount,
 
     #[error("invalid episode count")]
     InvalidEpisodeCount(#[source] std::num::ParseIntError),
@@ -82,6 +78,9 @@ enum TranslationInfoError {
     #[error("no data-media-type attribute in translation tag")]
     NoMediaType,
 
+    #[error("no data-episode-count attribute in translation tag but media-type is serial")]
+    NoEpisodeCount,
+
     #[error("no data-translation-type attribute in translation tag")]
     NoTranslationType,
 
@@ -102,11 +101,7 @@ impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
         let value = element.value();
 
         let title = value.attr("data-title").ok_or(Self::Error::NoTitle)?;
-        let episode_count = value
-            .attr("data-episode-count")
-            .ok_or(Self::Error::NoEpisodeCount)?
-            .parse::<u32>()
-            .map_err(Self::Error::InvalidEpisodeCount)?;
+
         let id = value
             .attr("data-id")
             .ok_or(Self::Error::NoId)?
@@ -124,7 +119,14 @@ impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
             .attr("data-media-type")
             .ok_or(Self::Error::NoMediaType)?;
         let media_type = match media_type_text {
-            "serial" => MediaType::Serial,
+            "serial" => {
+                let episode_count = value
+                    .attr("data-episode-count")
+                    .ok_or(Self::Error::NoEpisodeCount)?
+                    .parse::<u32>()
+                    .map_err(Self::Error::InvalidEpisodeCount)?;
+                MediaType::Serial(episode_count)
+            },
             "video" => MediaType::Video,
             v => MediaType::Other(v.to_owned()),
         };
@@ -147,7 +149,6 @@ impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
         }
         Ok(Self {
             title: title.to_owned(),
-            episode_count,
             id,
             media_hash: media_hash.to_owned(),
             media_id,
@@ -179,7 +180,6 @@ enum EpisodeInfoError {
 
     // #[error("invalid selected value: {0}")]
     // InvalidSelected(String),
-
     #[error("no data-title attribute in episode tag")]
     NoTitle,
 
@@ -191,7 +191,6 @@ enum EpisodeInfoError {
 
     // #[error("no data-translation-title attribute in episode tag")]
     // NoTranslationTitle,
-
     #[error("no value attribute in episode tag")]
     NoValue,
 
