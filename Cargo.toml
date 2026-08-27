@@ -23,3 +23,13 @@ serde_json = "1.0.151"
 thiserror = "2.0.20"
 tokio = {version = "1.53.1", features = ["full"]}
 url = "2.5.8"
+
+[profile.ultra]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+split-debuginfo = "packed"

@@ -3,7 +3,6 @@ use base64::{Engine as _, engine::general_purpose};
 use regex::Regex;
 use reqwest::Client;
 use scraper;
-use scraper::Node::Document;
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -15,6 +14,10 @@ use thiserror::Error;
 
 static CAESAR_SHIFT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"charCodeAt\s*\(\s*0\s*\)\s*\+\s*(\d+)"#).expect("valid caesar shift regex")
+});
+static CHAPTERS_PARSER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^(?:\[(.+)\])?([0-9]+(?::[0-9]+)?(?::[0-9]+)?-[0-9]+(?::[0-9]+)?(?::[0-9]+)?)$"#)
+        .expect("valid chapters parser regex")
 });
 
 static KOIDIK_API_BASE_URL: LazyLock<Url> =
@@ -39,13 +42,13 @@ impl MediaType {
     pub fn parse(
         media_type: &str,
         episode_count: Option<&str>,
-    ) -> Result<Self, TranslationInfoError> {
+    ) -> Result<Self, PageTranslationInfoError> {
         match media_type {
             "serial" => {
                 let count = episode_count
-                    .ok_or(TranslationInfoError::NoEpisodeCount)?
+                    .ok_or(PageTranslationInfoError::NoEpisodeCount)?
                     .parse()
-                    .map_err(TranslationInfoError::InvalidEpisodeCount)?;
+                    .map_err(PageTranslationInfoError::InvalidEpisodeCount)?;
 
                 Ok(Self::Serial(count))
             }
@@ -56,13 +59,13 @@ impl MediaType {
 }
 
 #[derive(Debug, Serialize)]
-pub enum TranslationType {
+pub enum PageTranslationType {
     Voice,
     Subtitles,
     Other(String),
 }
 
-impl From<&str> for TranslationType {
+impl From<&str> for PageTranslationType {
     fn from(value: &str) -> Self {
         match value {
             "voice" => Self::Voice,
@@ -73,18 +76,18 @@ impl From<&str> for TranslationType {
 }
 
 #[derive(Debug)]
-struct TranslationInfo {
+pub struct PageTranslationInfo {
     title: String,
     id: u32,
     media_hash: String,
     media_id: u32,
     media_type: MediaType,
-    translation_type: TranslationType,
+    translation_type: PageTranslationType,
     selected: bool,
 }
 
 #[derive(Debug, Error)]
-enum TranslationInfoError {
+pub enum PageTranslationInfoError {
     #[error("no data-title attribute in translation tag")]
     NoTitle,
 
@@ -113,7 +116,7 @@ enum TranslationInfoError {
     NoEpisodeCount,
 
     #[error("no data-translation-type attribute in translation tag")]
-    NoTranslationType,
+    NoPageTranslationType,
 
     #[error("no value attribute in translation tag")]
     NoValue,
@@ -122,11 +125,11 @@ enum TranslationInfoError {
     InvalidValue(#[source] std::num::ParseIntError),
 
     #[error("value and id not match")]
-    ValueAndIdNotMatch{value: u32, id: u32},
+    ValueAndIdNotMatch { value: u32, id: u32 },
 }
 
-impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
-    type Error = TranslationInfoError;
+impl<'a> TryFrom<ElementRef<'a>> for PageTranslationInfo {
+    type Error = PageTranslationInfoError;
 
     fn try_from(element: ElementRef<'a>) -> Result<Self, Self::Error> {
         let value = element.value();
@@ -154,7 +157,8 @@ impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
         )?;
         let translation_type = value
             .attr("data-translation-type")
-            .ok_or(Self::Error::NoTranslationType)?.into();
+            .ok_or(Self::Error::NoPageTranslationType)?
+            .into();
         let selected = value.attr("selected").is_some();
         let value_attr = value
             .attr("value")
@@ -163,7 +167,10 @@ impl<'a> TryFrom<ElementRef<'a>> for TranslationInfo {
             .map_err(Self::Error::InvalidValue)?;
 
         if value_attr != id {
-            return Err(Self::Error::ValueAndIdNotMatch{value: value_attr, id});
+            return Err(Self::Error::ValueAndIdNotMatch {
+                value: value_attr,
+                id,
+            });
         }
         Ok(Self {
             title: title.to_owned(),
@@ -208,12 +215,12 @@ enum EpisodeInfoError {
     NoId,
 
     // #[error("no data-translation-title attribute in episode tag")]
-    // NoTranslationTitle,
+    // NoPageTranslationTitle,
     #[error("no value attribute in episode tag")]
     NoValue,
 
     #[error("no data-other-translation attribute in episode tag")]
-    NoOtherTranslation,
+    NoOtherPageTranslation,
 }
 
 impl<'a> TryFrom<ElementRef<'a>> for EpisodeInfo {
@@ -238,7 +245,7 @@ impl<'a> TryFrom<ElementRef<'a>> for EpisodeInfo {
             .map_err(Self::Error::InvalidNumber)?;
         let other_translation_text = value
             .attr("data-other-translation")
-            .ok_or(Self::Error::NoOtherTranslation)?;
+            .ok_or(Self::Error::NoOtherPageTranslation)?;
 
         let other_translation = match other_translation_text {
             "true" => true,
@@ -323,7 +330,7 @@ impl KodikParserClient {
 
         // let translation_tags = document.select(&_SERIAL_TRANSLATIONS_SELECTOR);
         // let translation = translation_tags
-        //     .map(TranslationInfo::try_from)
+        //     .map(PageTranslationInfo::try_from)
         //     .filter(|r| match r {
         //         Ok(v) => v.selected,
         //         Err(_) => false,
@@ -345,6 +352,12 @@ impl KodikParserClient {
         let player_script_tag = script_tags.get(4).context("unable to get player script")?;
         let player_script_tag_text = player_script_tag.inner_html();
         let video_params = VideoParams::from_script(&player_script_tag_text)?;
+
+        let chapters = extract_raw_chapters_info(&player_script_tag_text)
+            .context("unable to parse raw chapters info")?;
+        // dbg!(&chapters);
+        let chapters = chapters.extract_chapters();
+        dbg!(chapters);
 
         let url_params_script = script_tags
             .get(0)
@@ -468,21 +481,6 @@ impl VideoParams {
     }
 }
 
-fn find_js_var<'a>(var_name: &str, source: &'a str) -> Option<&'a str> {
-    let prefix = format!("var {} = ", var_name);
-    source.lines().find_map(|line| {
-        line.trim()
-            .strip_prefix(&prefix)
-            .and_then(|l| l.strip_suffix(';'))
-    })
-}
-
-fn find_js_var_quoted<'a>(var_name: &str, source: &'a str) -> Option<&'a str> {
-    find_js_var(var_name, source)?
-        .strip_prefix('\'')?
-        .strip_suffix('\'')
-}
-
 #[derive(Debug, Deserialize)]
 struct RawKodikManifestLink {
     #[serde(rename = "src")]
@@ -581,4 +579,133 @@ fn pad_base64(value: &mut String) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn find_js_var<'a>(var_name: &str, source: &'a str) -> Option<&'a str> {
+    let prefix = format!("var {} = ", var_name);
+    find_js_value(&prefix, source, ";")
+}
+
+fn find_js_value<'a>(prefix: &str, source: &'a str, suffix: &str) -> Option<&'a str> {
+    source.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(prefix)
+            .and_then(|l| l.strip_suffix(suffix))
+    })
+}
+
+fn find_js_var_quoted<'a>(var_name: &str, source: &'a str) -> Option<&'a str> {
+    find_js_var(var_name, source)?
+        .strip_prefix('\'')?
+        .strip_suffix('\'')
+}
+
+#[derive(Debug)]
+struct RawChaptersInfo<'a> {
+    chapters: &'a str,
+    chapters_media_type: &'a str,
+}
+
+// enum RawChaptersInfoError
+
+fn extract_raw_chapters_info(script: &str) -> Option<RawChaptersInfo<'_>> {
+    let (chapters, chapters_media_type) = find_js_value(
+        "playerSettings.skipButton = parseSkipButton(\"",
+        script,
+        "\");",
+    )?
+    .rsplit_once(",")?;
+    let chapters = chapters.trim().strip_suffix('\"')?;
+    let chapters_media_type = chapters_media_type.trim().strip_prefix('\"')?;
+
+    Some(RawChaptersInfo {
+        chapters,
+        chapters_media_type,
+    })
+}
+
+#[derive(Debug)]
+struct ChapterInfo {
+    start: u32,
+    end: u32,
+    title: Option<ChapterTitle>,
+}
+
+impl ChapterInfo {
+    fn parse_chapter(chapter: &str) -> Option<Self> {
+        let chapter = CHAPTERS_PARSER_RE.captures(chapter)?;
+        let timecodes = chapter.get(2)?.as_str();
+        let (start, end) = timecodes.split_once('-')?;
+        let start = normalize_timecode(start)?;
+        let end = normalize_timecode(end)?;
+
+        if let Some(chapter_name) = chapter.get(1) {
+            let title = ChapterTitle::try_from(chapter_name.as_str()).ok();
+            Some(Self { start, end, title })
+        } else {
+            Some(Self {
+                start,
+                end,
+                title: None,
+            })
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ChapterTitle {
+    Opening,
+    Ending,
+    Intro,
+    Credits,
+}
+
+#[derive(Debug, Error)]
+enum ChapterTitleError {
+    #[error("unknown chapter title `{0}`")]
+    Unknown(String),
+}
+
+impl TryFrom<&str> for ChapterTitle {
+    type Error = ChapterTitleError;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let res = match value {
+            "opening" => Self::Opening,
+            "ending" => Self::Ending,
+            "intro" => Self::Intro,
+            "credits" => Self::Credits,
+            u => {
+                return Err(Self::Error::Unknown(u.to_owned()));
+            }
+        };
+        Ok(res)
+    }
+}
+
+impl<'a> RawChaptersInfo<'_> {
+    fn extract_chapters(self) -> Vec<ChapterInfo> {
+        let mut res = Vec::new();
+        for chapter in self.chapters.split(',') {
+            let chapter = ChapterInfo::parse_chapter(chapter);
+            if let Some(ch) = chapter {
+                res.push(ch);
+            }
+        }
+        res
+    }
+}
+
+fn normalize_timecode(timecode: &str) -> Option<u32> {
+    let mut time: u32 = 0;
+    for (i, tc) in timecode.rsplit(':').enumerate() {
+        if i >= 3 {
+            return None;
+        }
+        let value = tc.parse::<u32>().ok()?;
+        if i < 2 && value >= 60 {
+            return None;
+        }
+        time = time.checked_add(value.checked_mul(60_u32.pow(i as u32))?)?;
+    }
+    Some(time)
 }
