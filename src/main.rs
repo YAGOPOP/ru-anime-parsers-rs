@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
         .execute(&kodik_api_client)
         .await?;
 
-    dbg!(&kodik_search_resp);
+    // dbg!(&kodik_search_resp);
 
     let release = kodik_search_resp.results.get(0).context("no results")?;
 
