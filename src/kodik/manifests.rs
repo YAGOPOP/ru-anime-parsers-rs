@@ -288,6 +288,39 @@ impl<'a> TryFrom<ElementRef<'a>> for EpisodeInfo {
     }
 }
 
+struct UrlParamsScript(String);
+
+#[derive(Debug, Error)]
+enum UrlParamsError {
+    #[error("urlParams not found")]
+    NotFound,
+    #[error("")]
+    InvalidJson(#[from] serde_json::Error),
+}
+
+impl UrlParamsScript {
+    fn script(&self) -> &str {
+        self.0.as_ref()
+    }
+
+    fn new(script: String) -> Self {
+        Self(script)
+    }
+
+    fn get_url_params(&self) -> Result<UrlParams, UrlParamsError> {
+        let url_params_json =
+            find_js_var_quoted("urlParams", self.script()).ok_or(UrlParamsError::NotFound)?;
+        let url_params = serde_json::from_str(url_params_json)?;
+        Ok(url_params)
+    }
+}
+
+impl<'a> From<&ElementRef<'a>> for UrlParamsScript {
+    fn from(value: &ElementRef<'a>) -> Self {
+        Self::new(value.inner_html())
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct UrlParams {
     #[serde(rename = "d")]
@@ -375,19 +408,13 @@ impl KodikParserClient {
 
         let player_script_tag = script_tags.get(4).context("unable to get player script")?;
         let player_script = PlayerScript::from(player_script_tag);
-
         let video_params = player_script.get_video_params()?;
-
         let chapters = player_script.get_chapters();
         dbg!(chapters);
 
-        let url_params_script = script_tags
-            .get(0)
-            .context("url params missing")?
-            .inner_html();
-        let url_params_json =
-            find_js_var_quoted("urlParams", &url_params_script).context("urlParams not found")?;
-        let url_params: UrlParams = serde_json::from_str(url_params_json)?;
+        let url_params_script_tag = script_tags.get(0).context("url params missing")?;
+        let url_params_script = UrlParamsScript::from(url_params_script_tag);
+        let url_params: UrlParams = url_params_script.get_url_params()?;
 
         let serial_script_tag = script_tags.get(1).context("serial_script is None")?;
         let serial_script_source = serial_script_tag
