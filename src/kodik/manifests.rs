@@ -12,8 +12,6 @@ use std::sync::LazyLock;
 
 use thiserror::Error;
 
-use super::chapters::{RawChaptersInfo, extract_raw_chapters_info};
-
 static CAESAR_SHIFT_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"charCodeAt\s*\(\s*0\s*\)\s*\+\s*(\d+)"#).expect("valid caesar shift regex")
 });
@@ -97,40 +95,28 @@ pub struct PageTranslationInfo {
 pub enum PageTranslationInfoError {
     #[error("no data-title attribute in translation tag")]
     NoTitle,
-
     #[error("invalid episode count")]
     InvalidEpisodeCount(#[source] std::num::ParseIntError),
-
     #[error("no data-id attribute in translation tag")]
     NoId,
-
     #[error("invalid translation id")]
     InvalidId(#[source] std::num::ParseIntError),
-
     #[error("no data-media-hash attribute in translation tag")]
     NoMediaHash,
-
     #[error("no data-media-id attribute in translation tag")]
     NoMediaId,
-
     #[error("invalid translation media_id")]
     InvalidMediaId(#[source] std::num::ParseIntError),
-
     #[error("no data-media-type attribute in translation tag")]
     NoMediaType,
-
     #[error("no data-episode-count attribute in translation tag but media-type is serial")]
     NoEpisodeCount,
-
     #[error("no data-translation-type attribute in translation tag")]
     NoPageTranslationType,
-
     #[error("no value attribute in translation tag")]
     NoValue,
-
     #[error("invalid translation value")]
     InvalidValue(#[source] std::num::ParseIntError),
-
     #[error("value and id not match")]
     ValueAndIdNotMatch { value: u32, id: u32 },
 }
@@ -206,26 +192,16 @@ struct EpisodeInfo {
 enum EpisodeInfoError {
     #[error("invalid episode id")]
     InvalidId(#[source] std::num::ParseIntError),
-
     #[error("invalid episode number")]
     InvalidNumber(#[source] std::num::ParseIntError),
-
-    // #[error("invalid selected value: {0}")]
-    // InvalidSelected(String),
     #[error("no data-title attribute in episode tag")]
     NoTitle,
-
     #[error("no data-hash attribute in episode tag")]
     NoHash,
-
     #[error("no data-id attribute in episode tag")]
     NoId,
-
-    // #[error("no data-translation-title attribute in episode tag")]
-    // NoPageTranslationTitle,
     #[error("no value attribute in episode tag")]
     NoValue,
-
     #[error("no data-other-translation attribute in episode tag")]
     NoOtherPageTranslation,
 }
@@ -360,10 +336,10 @@ impl KodikParserClient {
         let player_script = PlayerScript::new(player_script_tag.inner_html());
 
         let video_params = VideoParams::from_script(&player_script)?;
-        let chapters = extract_raw_chapters_info(&player_script)
-            .context("unable to parse raw chapters info")?;
-        // dbg!(&chapters);
-        let chapters = chapters.extract_chapters();
+
+        // println!("{}", &player_script.0);
+
+        let chapters = player_script.get_chapters();
         dbg!(chapters);
 
         let url_params_script = script_tags
