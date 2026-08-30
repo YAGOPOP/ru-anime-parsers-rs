@@ -28,11 +28,52 @@ static _EPISODES_SELECTOR: LazyLock<Selector> =
 static SCRIPT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("script").unwrap());
 
 #[derive(Debug)]
-pub(super) struct PlayerScript(pub(super) String);
+pub(super) struct PlayerScript(String);
+
+#[derive(Debug, Error)]
+enum VideoParamsError {
+    #[error("vInfo.hash not found")]
+    NoHash,
+    #[error("vInfo.id not found")]
+    NoId,
+    #[error("vInfo.type not found")]
+    NoType,
+}
 
 impl PlayerScript {
     fn new(player_script: String) -> Self {
         Self(player_script)
+    }
+
+    pub(super) fn script(&self) -> &str {
+        self.0.as_str()
+    }
+
+    fn get_video_params(&self) -> Result<VideoParams, VideoParamsError> {
+        let mut hash = None;
+        let mut id = None;
+        let mut video_type = None;
+
+        for (key, value) in self.script().lines().filter_map(parse_vinfo_assignment) {
+            match key {
+                "hash" => hash = Some(value),
+                "id" => id = Some(value),
+                "type" => video_type = Some(value),
+                _ => {}
+            }
+        }
+
+        Ok(VideoParams {
+            hash: hash.ok_or(VideoParamsError::NoHash)?.to_owned(),
+            id: id.ok_or(VideoParamsError::NoId)?.to_owned(),
+            video_type: video_type.ok_or(VideoParamsError::NoType)?.to_owned(),
+        })
+    }
+}
+
+impl<'a> From<&ElementRef<'a>> for PlayerScript {
+    fn from(value: &ElementRef<'a>) -> Self {
+        Self::new(value.inner_html())
     }
 }
 
@@ -333,11 +374,9 @@ impl KodikParserClient {
         let script_tags: Vec<_> = document.select(&SCRIPT_SELECTOR).collect();
 
         let player_script_tag = script_tags.get(4).context("unable to get player script")?;
-        let player_script = PlayerScript::new(player_script_tag.inner_html());
+        let player_script = PlayerScript::from(player_script_tag);
 
-        let video_params = VideoParams::from_script(&player_script)?;
-
-        // println!("{}", &player_script.0);
+        let video_params = player_script.get_video_params()?;
 
         let chapters = player_script.get_chapters();
         dbg!(chapters);
@@ -439,31 +478,6 @@ fn parse_vinfo_assignment(line: &str) -> Option<(&str, &str)> {
     let value = value.trim().strip_prefix('\'')?.strip_suffix("';")?;
 
     Some((key, value))
-}
-
-impl VideoParams {
-    fn from_script(player_script: &PlayerScript) -> anyhow::Result<Self> {
-        let script = &player_script.0;
-
-        let mut hash = None;
-        let mut id = None;
-        let mut video_type = None;
-
-        for (key, value) in script.lines().filter_map(parse_vinfo_assignment) {
-            match key {
-                "hash" => hash = Some(value),
-                "id" => id = Some(value),
-                "type" => video_type = Some(value),
-                _ => {}
-            }
-        }
-
-        Ok(Self {
-            hash: hash.context("vInfo.hash not found")?.into(),
-            id: id.context("vInfo.id not found")?.into(),
-            video_type: video_type.context("vInfo.type not found")?.into(),
-        })
-    }
 }
 
 #[derive(Debug, Deserialize)]

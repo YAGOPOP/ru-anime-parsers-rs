@@ -23,7 +23,7 @@ impl PlayerScript {
     fn extract_raw_chapters_info(&self) -> Option<RawChapters<'_>> {
         let (chapters, chapters_media_type) = find_js_value(
             "playerSettings.skipButton = parseSkipButton(\"",
-            &self.0,
+            self.script(),
             "\");",
         )?
         .rsplit_once(",")?;
