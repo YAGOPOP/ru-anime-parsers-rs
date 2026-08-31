@@ -5,7 +5,7 @@ use dotenvy;
 use tokio;
 use url::Url;
 
-use crate::kodik::KodikParserClient;
+use crate::kodik::{GroupReleases, KodikParserClient};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -24,7 +24,12 @@ async fn main() -> anyhow::Result<()> {
         .execute(&kodik_api_client)
         .await?;
 
-    // dbg!(&kodik_search_resp);
+    let grouped_releases = &kodik_search_resp.group_releases();
+    dbg!(&grouped_releases);
+    for r in grouped_releases {
+        println!("{}", r)
+    }
+
 
     let release = kodik_search_resp.results.get(0).context("no results")?;
 
