@@ -2,7 +2,6 @@ mod kodik;
 
 use anyhow::{self, Context, Ok};
 use dotenvy;
-use kodik_api;
 use tokio;
 use url::Url;
 

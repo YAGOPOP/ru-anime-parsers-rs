@@ -24,6 +24,10 @@ thiserror = "2.0.20"
 tokio = {version = "1.53.1", features = ["full"]}
 url = "2.5.8"
 
+[features]
+default = ["kodik-api"]
+kodik-api = []
+
 [profile.ultra]
 inherits = "release"
 opt-level = 3
