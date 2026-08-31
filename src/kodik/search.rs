@@ -8,6 +8,33 @@ pub trait GroupReleases {
     fn group_releases(&self) -> Vec<ReleaseGroup<'_>>;
 }
 
+trait IsSameRelease {
+    fn is_same_release(&self, release: &Release) -> bool;
+}
+
+impl IsSameRelease for Release {
+    fn is_same_release(&self, release: &Release) -> bool {
+        self.title == release.title
+            || self.title_orig == release.title_orig
+            || compare_options(&self.other_title, &release.other_title)
+            || compare_options(&self.kinopoisk_id, &release.kinopoisk_id)
+            || compare_options(&self.imdb_id, &release.imdb_id)
+            || compare_options(&self.mdl_id, &release.mdl_id)
+            || compare_options(&self.worldart_link, &release.worldart_link)
+            || compare_options(&self.shikimori_id, &release.shikimori_id)
+    }
+}
+
+fn compare_options<T>(o1: &Option<T>, o2: &Option<T>) -> bool
+where
+    T: Eq,
+{
+    match (o1, o2) {
+        (Some(r1), Some(r2)) => r1 == r2,
+        _ => false,
+    }
+}
+
 impl<'a> ReleaseGroup<'a> {
     fn new(release_group: Vec<&'a Release>) -> Self {
         Self(release_group)
@@ -34,23 +61,13 @@ impl GroupReleases for SearchResponse {
     }
 }
 
-fn compare_releases(rel1: &Release, rel2: &Release) -> bool {
-    if rel1.title == rel2.title {
-        return true;
-    } else if rel1.title_orig == rel2.title_orig {
-        return true;
-    }
-
-    false
-}
-
 fn update_groups<'a>(groups: &mut Vec<ReleaseGroup<'a>>, release: &'a Release) {
     for group in groups.iter_mut() {
         let Some(first) = group.0.first() else {
             continue;
         };
 
-        if compare_releases(first, release) {
+        if first.is_same_release(release) {
             group.0.push(release);
             return;
         }
