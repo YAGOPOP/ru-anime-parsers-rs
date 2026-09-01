@@ -4,4 +4,4 @@ mod manifests;
 mod search;
 
 pub use manifests::{KodikManifestLink, KodikParserClient};
-pub use search::GroupReleases;
+pub use search::{GroupReleases, ParserTranslation};

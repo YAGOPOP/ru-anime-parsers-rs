@@ -27,9 +27,9 @@ async fn main() -> anyhow::Result<()> {
     let grouped_releases = &kodik_search_resp.group_releases();
     dbg!(&grouped_releases);
     for r in grouped_releases {
-        println!("{}", r)
+        println!("{}", &r);
+        dbg!(r.get_translations());
     }
-
 
     let release = kodik_search_resp.results.get(0).context("no results")?;
 

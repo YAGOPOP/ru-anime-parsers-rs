@@ -1,5 +1,5 @@
 use kodik_api::search::SearchResponse;
-use kodik_api::types::Release;
+use kodik_api::types::{Release, Translation as KodikAPITranslation};
 
 #[derive(Debug)]
 pub struct ReleaseGroup<'a>(Vec<&'a Release>);
@@ -35,6 +35,27 @@ where
     }
 }
 
+#[derive(Debug)]
+pub struct ParserTranslation<'a> {
+    kodik_api_translation: &'a KodikAPITranslation,
+    link: &'a str,
+}
+
+impl ParserTranslation<'_> {
+    pub(crate) fn studio(&self) -> &str {
+        self.kodik_api_translation.title.as_ref()
+    }
+}
+
+impl<'a> From<&'a Release> for ParserTranslation<'a> {
+    fn from(value: &'a Release) -> Self {
+        Self {
+            kodik_api_translation: &value.translation,
+            link: value.link.as_ref(),
+        }
+    }
+}
+
 impl<'a> ReleaseGroup<'a> {
     fn new(release_group: Vec<&'a Release>) -> Self {
         Self(release_group)
@@ -42,6 +63,13 @@ impl<'a> ReleaseGroup<'a> {
 
     fn title(&self) -> &str {
         self.0[0].title.as_str()
+    }
+
+    pub(crate) fn get_translations(&self) -> Vec<ParserTranslation> {
+        self.0
+            .iter()
+            .map(|el| ParserTranslation::from(*el))
+            .collect()
     }
 }
 
