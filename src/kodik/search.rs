@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use std::fmt::write;
+
 use kodik_api::search::SearchResponse;
 use kodik_api::types::Release;
 
@@ -43,6 +46,10 @@ impl<'a> ReleaseGroup<'a> {
     fn title(&self) -> &str {
         self.0[0].title.as_str()
     }
+
+    fn releases(&self) -> &[&Release] {
+        self.0.as_slice()
+    }
 }
 
 impl<'a> std::fmt::Display for ReleaseGroup<'a> {
@@ -74,4 +81,17 @@ fn update_groups<'a>(groups: &mut Vec<ReleaseGroup<'a>>, release: &'a Release) {
     }
 
     groups.push(ReleaseGroup::new(vec![release]));
+}
+
+pub trait DisplayTitle {
+    fn display_title(&self) -> Cow<'_, str>;
+}
+
+impl DisplayTitle for Release {
+    fn display_title(&self) -> Cow<'_, str> {
+        match self.episodes_count {
+            Some(c) => Cow::Owned(format!("{} ({} ep.)", self.translation.title, c)),
+            None => Cow::Borrowed(self.translation.title.as_ref()),
+        }
+    }
 }

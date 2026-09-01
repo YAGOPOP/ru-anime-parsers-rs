@@ -1,5 +1,3 @@
-use crate::kodik::chapters;
-
 use super::manifests::PlayerScript;
 use super::manifests::find_js_value;
 use regex::Regex;
