@@ -77,6 +77,56 @@ impl<'a> From<&ElementRef<'a>> for PlayerScript {
     }
 }
 
+#[derive(Debug)]
+struct SerialScript(String);
+
+#[derive(Debug, Error)]
+pub enum SerialScriptError {
+    #[error("not found hidden endpoint in serial script")]
+    EndpointNotFound,
+    #[error("failed to decode endpoint from serial script")]
+    EndpointDecodeError(#[from] base64::DecodeError),
+    #[error("invalid utf-8 in decoded endpoint")]
+    EndpointInvalidUtf8(#[from] std::string::FromUtf8Error),
+}
+
+impl SerialScript {
+    fn new(script: String) -> Self {
+        Self(script)
+    }
+
+    /// # Extracts base64 encoded hidden endpoint from script.
+    /// The fragment of interest:
+    /// ```JavaScript
+    /// //...
+    /// $.ajax({type:"POST",url:atob("L2Z0b3I="),cache:!1
+    /// //...
+    /// ```
+    fn extract_endpoint(&self) -> Option<&str> {
+        self.0
+            .split_once("url:atob(\"")?
+            .1
+            .split_once("\")")
+            .map(|(endpoint, _)| endpoint)
+    }
+
+    fn get_endpoint(&self) -> Result<String, SerialScriptError> {
+        let coded = self
+            .extract_endpoint()
+            .ok_or(SerialScriptError::EndpointNotFound)?;
+        let decoded = general_purpose::STANDARD.decode(coded)?;
+        let endpoint = String::from_utf8(decoded)?;
+        Ok(endpoint)
+    }
+
+    fn extract_caesar_shift(&self) -> Option<u8> {
+        let caps = CAESAR_SHIFT_RE.captures(&self.0)?;
+        let shift: u8 = caps.get(1)?.as_str().parse().ok()?;
+
+        if shift < 26 { Some(shift) } else { None }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub enum MediaType {
     Serial(u32),
@@ -410,7 +460,6 @@ impl KodikParserClient {
         let player_script = PlayerScript::from(player_script_tag);
         let video_params = player_script.get_video_params()?;
         let chapters = player_script.get_chapters();
-        dbg!(chapters);
 
         let url_params_script_tag = script_tags.get(0).context("url params missing")?;
         let url_params_script = UrlParamsScript::from(url_params_script_tag);
@@ -431,11 +480,9 @@ impl KodikParserClient {
             .text()
             .await
             .context("serial script response has no text")?;
+        let serial_script = SerialScript::new(serial_script);
 
-        let coded_endpoint =
-            extract_endpoint(&serial_script).context("unable to extract hidden endpoint")?;
-        let decoded = general_purpose::STANDARD.decode(coded_endpoint)?;
-        let endpoint = String::from_utf8(decoded)?;
+        let endpoint = serial_script.get_endpoint()?;
         let post_url = KOIDIK_API_BASE_URL.join(&endpoint)?;
 
         let kodik_manifest_response = client
@@ -454,8 +501,9 @@ impl KodikParserClient {
             .get_link_of_quality(360)
             .context("360p source not found")?;
 
-        let caesar_shift =
-            extract_caesar_shift(&serial_script).context("caesar shift not extracted")?;
+        let caesar_shift = serial_script
+            .extract_caesar_shift()
+            .context("caesar shift not extracted")?;
 
         let decrypted_link = link.decrypt(caesar_shift)?;
 
@@ -468,33 +516,14 @@ impl KodikParserClient {
     pub fn from_client(reqwest_client: Client) -> Self {
         Self { reqwest_client }
     }
+
+    fn fetch() {}
 }
 
 impl Default for KodikParserClient {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// # Extracts base64 encoded hidden endpoint from script.
-/// The fragment of interest:
-/// ```JavaScript
-/// //...
-/// $.ajax({type:"POST",url:atob("L2Z0b3I="),cache:!1
-/// //...
-/// ```
-fn extract_endpoint(data: &str) -> Option<&str> {
-    data.split_once("url:atob(\"")?
-        .1
-        .split_once("\")")
-        .map(|(endpoint, _)| endpoint)
-}
-
-fn extract_caesar_shift(js: &str) -> Option<u8> {
-    let caps = CAESAR_SHIFT_RE.captures(js)?;
-    let shift: u8 = caps.get(1)?.as_str().parse().ok()?;
-
-    if shift < 26 { Some(shift) } else { None }
 }
 
 fn parse_vinfo_assignment(line: &str) -> Option<(&str, &str)> {
@@ -512,7 +541,7 @@ struct RawKodikManifestLink {
     #[serde(rename = "src")]
     source: String,
     #[serde(rename = "type")]
-    _source_type: String,
+    source_type: String,
 }
 
 #[derive(Debug, Deserialize)]

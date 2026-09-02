@@ -15,15 +15,16 @@ trait IsSameRelease {
     fn is_same_release(&self, release: &Release) -> bool;
 }
 
+//todo: make method to detect whether releases are same franchise or not
 impl IsSameRelease for Release {
     fn is_same_release(&self, release: &Release) -> bool {
         self.title == release.title
             || self.title_orig == release.title_orig
             || compare_options(&self.other_title, &release.other_title)
-            || compare_options(&self.kinopoisk_id, &release.kinopoisk_id)
-            || compare_options(&self.imdb_id, &release.imdb_id)
+            // || compare_options(&self.kinopoisk_id, &release.kinopoisk_id)
+            // || compare_options(&self.imdb_id, &release.imdb_id)
             || compare_options(&self.mdl_id, &release.mdl_id)
-            || compare_options(&self.worldart_link, &release.worldart_link)
+            // || compare_options(&self.worldart_link, &release.worldart_link)
             || compare_options(&self.shikimori_id, &release.shikimori_id)
     }
 }
@@ -43,11 +44,11 @@ impl<'a> ReleaseGroup<'a> {
         Self(release_group)
     }
 
-    fn title(&self) -> &str {
+    pub fn title(&self) -> &str {
         self.0[0].title.as_str()
     }
 
-    fn releases(&self) -> &[&Release] {
+    pub fn releases(&self) -> &[&Release] {
         self.0.as_slice()
     }
 }
