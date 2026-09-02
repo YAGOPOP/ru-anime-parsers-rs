@@ -1,8 +1,6 @@
-use std::borrow::Cow;
-use std::fmt::write;
-
 use kodik_api::search::SearchResponse;
 use kodik_api::types::Release;
+use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct ReleaseGroup<'a>(Vec<&'a Release>);
