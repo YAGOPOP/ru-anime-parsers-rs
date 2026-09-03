@@ -1,7 +1,7 @@
 use anyhow::{self, Context};
 use base64::{Engine as _, engine::general_purpose};
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{Client, IntoUrl};
 use scraper;
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
@@ -420,6 +420,14 @@ pub struct KodikParserClient {
     reqwest_client: Client,
 }
 
+#[derive(Debug, Error)]
+pub enum KodilParserClientError {
+    #[error("Failed request: {0}")]
+    ReqestFailed(#[from] reqwest::Error),
+    #[error("No text in serial script")]
+    SerialScriptNoText,
+}
+
 impl KodikParserClient {
     pub async fn get_episode_manifest(
         &self,
@@ -434,25 +442,6 @@ impl KodikParserClient {
         let page_resp = client.get(url.as_str()).send().await?.error_for_status()?;
         let page_resp_text = page_resp.text().await?;
         let document = Html::parse_document(&page_resp_text);
-
-        // let translation_tags = document.select(&_SERIAL_TRANSLATIONS_SELECTOR);
-        // let translation = translation_tags
-        //     .map(PageTranslationInfo::try_from)
-        //     .filter(|r| match r {
-        //         Ok(v) => v.selected,
-        //         Err(_) => false,
-        //     })
-        //     .collect::<Result<Vec<_>, _>>()?;
-
-        // if let Some(tr) = translation.get(0) {
-        //     if let MediaType::Serial(ep_count) = tr.media_type {
-        //         if ep_count < episode_number {
-        //             anyhow::bail!(
-        //                 "provided episode number excedits amount of episodes in selected translation"
-        //             );
-        //         }
-        //     }
-        // }
 
         let script_tags: Vec<_> = document.select(&SCRIPT_SELECTOR).collect();
 
@@ -470,18 +459,9 @@ impl KodikParserClient {
             .value()
             .attr("src")
             .context("src attr missing in serial_script_tag")?;
-        let serial_script_url = KOIDIK_API_BASE_URL.join(&serial_script_source)?;
-        let serial_script_resp = client
-            .get(serial_script_url)
-            .send()
-            .await?
-            .error_for_status()?;
-        let serial_script = serial_script_resp
-            .text()
-            .await
-            .context("serial script response has no text")?;
-        let serial_script = SerialScript::new(serial_script);
 
+        let serial_script_url = KOIDIK_API_BASE_URL.join(serial_script_source)?;
+        let serial_script = self.fetch_serial_script(serial_script_url).await?;
         let endpoint = serial_script.get_endpoint()?;
         let post_url = KOIDIK_API_BASE_URL.join(&endpoint)?;
 
@@ -493,10 +473,8 @@ impl KodikParserClient {
             .error_for_status()?;
 
         let kodik_manifest_response = kodik_manifest_response.text().await?;
-        let kodik_manifest_response: serde_json::Value =
-            serde_json::from_str(&kodik_manifest_response)?;
 
-        let links: RawKodikManifestLinks = serde_json::from_value(kodik_manifest_response)?;
+        let links: RawKodikManifestLinks = serde_json::from_str(&kodik_manifest_response)?;
         let link = links
             .get_link_of_quality(360)
             .context("360p source not found")?;
@@ -517,7 +495,20 @@ impl KodikParserClient {
         Self { reqwest_client }
     }
 
-    fn fetch() {}
+    async fn fetch_serial_script(
+        &self,
+        serial_script_url: impl IntoUrl,
+    ) -> Result<SerialScript, KodilParserClientError> {
+        let serial_script_resp = self
+            .reqwest_client
+            .get(serial_script_url)
+            .send()
+            .await?
+            .error_for_status()?;
+        let serial_script = serial_script_resp.text().await?;
+        let serial_script = SerialScript::new(serial_script);
+        Ok(serial_script)
+    }
 }
 
 impl Default for KodikParserClient {
