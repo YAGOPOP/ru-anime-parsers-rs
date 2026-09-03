@@ -4,4 +4,5 @@ mod manifests;
 mod search;
 
 pub use manifests::KodikParserClient;
+#[cfg(feature = "kodik-api")]
 pub use search::GroupReleases;
