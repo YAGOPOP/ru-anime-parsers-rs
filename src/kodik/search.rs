@@ -60,7 +60,7 @@ impl<'a> std::fmt::Display for ReleaseGroup<'a> {
 impl GroupReleases for SearchResponse {
     fn group_releases(&self) -> Vec<ReleaseGroup<'_>> {
         let mut release_groups = Vec::new();
-        for release in &self.results {
+        for release in self.results.iter().rev() {
             update_groups(&mut release_groups, release);
         }
         release_groups

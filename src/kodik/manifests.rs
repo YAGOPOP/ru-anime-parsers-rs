@@ -426,6 +426,8 @@ pub enum KodilParserClientError {
     ReqestFailed(#[from] reqwest::Error),
     #[error("No text in serial script")]
     SerialScriptNoText,
+    #[error("Unable to paarse raw data {0}")]
+    InvalidRawData(#[from] serde_json::Error)
 }
 
 impl KodikParserClient {
@@ -464,17 +466,8 @@ impl KodikParserClient {
         let serial_script = self.fetch_serial_script(serial_script_url).await?;
         let endpoint = serial_script.get_endpoint()?;
         let post_url = KOIDIK_API_BASE_URL.join(&endpoint)?;
+        let links = self.fetch_raw_manifests(post_url, &PostPayload::from_params(url_params, video_params)).await?;
 
-        let kodik_manifest_response = client
-            .post(post_url)
-            .form(&PostPayload::from_params(url_params, video_params))
-            .send()
-            .await?
-            .error_for_status()?;
-
-        let kodik_manifest_response = kodik_manifest_response.text().await?;
-
-        let links: RawKodikManifestLinks = serde_json::from_str(&kodik_manifest_response)?;
         let link = links
             .get_link_of_quality(360)
             .context("360p source not found")?;
@@ -508,6 +501,18 @@ impl KodikParserClient {
         let serial_script = serial_script_resp.text().await?;
         let serial_script = SerialScript::new(serial_script);
         Ok(serial_script)
+    }
+
+    async fn fetch_raw_manifests(&self, url: impl IntoUrl, form: &PostPayload) -> Result<RawKodikManifestLinks, KodilParserClientError>{
+        let kodik_manifest_response = self.reqwest_client
+            .post(url)
+            .form(form)
+            .send()
+            .await?
+            .error_for_status()?;
+        let kodik_manifest_response = kodik_manifest_response.text().await?;
+        let links: RawKodikManifestLinks = serde_json::from_str(&kodik_manifest_response)?;
+        Ok(links)
     }
 }
 
