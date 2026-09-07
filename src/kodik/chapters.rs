@@ -1,5 +1,5 @@
-use super::manifests::PlayerScript;
-use super::manifests::find_js_value;
+use super::scripts::PlayerScript;
+use super::scripts::find_js_value;
 use regex::Regex;
 use std::sync::LazyLock;
 use thiserror::Error;
@@ -24,7 +24,7 @@ impl PlayerScript {
             self.script(),
             "\");",
         )?
-        .rsplit_once(",")?;
+        .rsplit_once(',')?;
         let chapters = chapters.trim().strip_suffix('\"')?;
         let media_kind = chapters_media_type.trim().strip_prefix('\"')?;
 
@@ -44,22 +44,22 @@ impl PlayerScript {
 }
 
 #[derive(Debug)]
-pub(super) struct Chapter {
+pub struct Chapter {
     start: u32,
     end: u32,
     kind: Option<ChapterKind>,
 }
 
 impl Chapter {
-    pub(super) fn start(&self) -> u32 {
+    pub fn start(&self) -> u32 {
         self.start
     }
 
-    pub(super) fn end(&self) -> u32 {
+    pub fn end(&self) -> u32 {
         self.end
     }
 
-    pub(super) fn kind(&self) -> Option<&ChapterKind> {
+    pub fn kind(&self) -> Option<&ChapterKind> {
         self.kind.as_ref()
     }
 
@@ -87,7 +87,7 @@ impl Chapter {
 }
 
 #[derive(Debug, Error)]
-pub(super) enum ChapterParseError {
+pub enum ChapterParseError {
     #[error("invalid chapter format: {0}")]
     InvalidFormat(String),
     #[error("invalid start: {0}")]
