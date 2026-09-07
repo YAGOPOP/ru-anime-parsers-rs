@@ -1,11 +1,17 @@
 mod chapters;
+mod client;
 mod manifests;
+mod page;
+mod scripts;
 #[cfg(feature = "kodik-api")]
 mod search;
-mod client;
-mod scripts;
-mod page;
 
-pub use client::KodikParserClient;
+pub use chapters::{Chapter, ChapterKind, ChapterParseError, Chapters, ChaptersMediaKind};
+pub use client::{KodikParserClient, KodikParserClientError};
+pub use manifests::{KodikManifestLink, KodikManifestLinkError, KodikManifestLinks};
+pub use page::{
+    EpisodeInfo, EpisodeInfoError, MediaType, PageTranslationInfo, PageTranslationType,
+};
+
 #[cfg(feature = "kodik-api")]
-pub use search::GroupReleases;
+pub use search::{DisplayTitle, GroupReleases};

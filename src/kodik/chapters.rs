@@ -125,7 +125,7 @@ impl TryFrom<&str> for Chapter {
 }
 
 #[derive(Debug)]
-enum ChapterKind {
+pub enum ChapterKind {
     Opening,
     Ending,
     Intro,
@@ -180,7 +180,7 @@ fn parse_timecode(value: &str) -> Option<u32> {
 }
 
 #[derive(Debug)]
-enum ChaptersMediaKind {
+pub enum ChaptersMediaKind {
     Anime,
     Other(String),
 }
@@ -195,12 +195,19 @@ impl From<&str> for ChaptersMediaKind {
 }
 
 #[derive(Debug)]
-struct Chapters {
+pub struct Chapters {
     chapters: Vec<Chapter>,
     media_kind: ChaptersMediaKind,
 }
 
 impl Chapters {
+    pub fn chapters(&self) -> &[Chapter] {
+        self.chapters.as_slice()
+    }
+    pub fn media_kind(&self) -> &ChaptersMediaKind {
+        &self.media_kind
+    }
+
     pub(super) fn into_guessed(mut self) -> Vec<Chapter> {
         let total = self.chapters.len();
 

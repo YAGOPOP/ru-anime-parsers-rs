@@ -1,14 +1,6 @@
-use anyhow::{self, Context};
 use base64::{Engine as _, engine::general_purpose};
-use regex::Regex;
-use scraper;
-use scraper::{ElementRef, Html, Selector};
-use serde::{Deserialize, Serialize};
-use tokio::time::error;
+use serde::Deserialize;
 use url::Url;
-
-use std::sync::LazyLock;
-
 use thiserror::Error;
 
 #[derive(Debug, Deserialize)]
@@ -91,6 +83,20 @@ pub struct KodikManifestLinks {
     quality_360p: Option<KodikManifestLink>,
     quality_480p: Option<KodikManifestLink>,
     quality_720p: Option<KodikManifestLink>,
+}
+
+impl KodikManifestLinks {
+    pub fn quality_360p(&self) -> Option<&KodikManifestLink> {
+        self.quality_360p.as_ref()
+    }
+
+    pub fn quality_480p(&self) -> Option<&KodikManifestLink> {
+        self.quality_480p.as_ref()
+    }
+
+    pub fn quality_720p(&self) -> Option<&KodikManifestLink> {
+        self.quality_720p.as_ref()
+    }
 }
 
 #[derive(Debug, Error)]

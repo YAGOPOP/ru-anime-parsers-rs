@@ -1,13 +1,6 @@
-use anyhow::{self, Context};
-use base64::{Engine as _, engine::general_purpose};
-use regex::Regex;
 use scraper;
-use scraper::{ElementRef, Html, Selector};
-use serde::{Deserialize, Serialize};
-use tokio::time::error;
-use url::Url;
-
-use std::sync::LazyLock;
+use scraper::ElementRef;
+use serde::Serialize;
 
 use thiserror::Error;
 
@@ -57,13 +50,13 @@ impl From<&str> for PageTranslationType {
 
 #[derive(Debug)]
 pub struct PageTranslationInfo {
-    title: String,
-    id: u32,
-    media_hash: String,
-    media_id: u32,
-    media_type: MediaType,
-    translation_type: PageTranslationType,
-    selected: bool,
+    pub title: String,
+    pub id: u32,
+    pub media_hash: String,
+    pub media_id: u32,
+    pub media_type: MediaType,
+    pub translation_type: PageTranslationType,
+    pub selected: bool,
 }
 
 #[derive(Debug, Error)]
@@ -153,18 +146,18 @@ impl<'a> TryFrom<ElementRef<'a>> for PageTranslationInfo {
 }
 
 #[derive(Debug)]
-struct EpisodeInfo {
-    title: String,
-    hash: String,
-    id: u32,
-    translation_title: Option<String>,
-    selected: bool,
-    number: u32,
-    _other_translation: bool,
+pub struct EpisodeInfo {
+    pub title: String,
+    pub hash: String,
+    pub id: u32,
+    pub translation_title: Option<String>,
+    pub selected: bool,
+    pub number: u32,
+    pub _other_translation: bool,
 }
 
 #[derive(Debug, Error)]
-enum EpisodeInfoError {
+pub enum EpisodeInfoError {
     #[error("invalid episode id")]
     InvalidId(#[source] std::num::ParseIntError),
     #[error("invalid episode number")]

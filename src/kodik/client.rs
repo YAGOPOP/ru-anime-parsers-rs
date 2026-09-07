@@ -1,20 +1,13 @@
-use super::manifests::{KodikManifestLinkError, KodikManifestLinks};
 use anyhow::{self, Context};
-use base64::{Engine as _, engine::general_purpose};
-use regex::Regex;
 use reqwest::{Client, IntoUrl};
 use scraper;
-use scraper::{ElementRef, Html, Selector};
-use serde::{Deserialize, Serialize};
-use tokio::time::error;
+use scraper::{Html, Selector};
+use std::sync::LazyLock;
+use thiserror::Error;
 use url::Url;
 
-use std::sync::LazyLock;
-
-use thiserror::Error;
-
-use super::scripts::{PlayerScript, SerialScript, UrlParamsScript, UrlParams, PostPayload};
-use super::manifests::{KodikManifestLink, LinksResponse, ManifestResponse};
+use super::manifests::{KodikManifestLinks, LinksResponse, ManifestResponse};
+use super::scripts::{PlayerScript, PostPayload, SerialScript, UrlParams, UrlParamsScript};
 
 static KODIK_API_BASE_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://kodikplayer.com").unwrap());
@@ -66,7 +59,8 @@ impl KodikParserClient {
             .context("unable to get player script")?;
         let player_script = PlayerScript::from(player_script_tag);
         let video_params = player_script.get_video_params()?;
-        let chapters = player_script.get_chapters();
+
+        let _chapters = player_script.get_chapters();
 
         let url_params_script_tag = script_tags
             .get(URL_PARAMS_SCRIPT)
