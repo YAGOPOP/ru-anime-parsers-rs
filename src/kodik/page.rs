@@ -1,4 +1,3 @@
-use scraper;
 use scraper::ElementRef;
 use serde::Serialize;
 

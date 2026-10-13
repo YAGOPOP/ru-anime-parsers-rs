@@ -1,9 +1,7 @@
 use base64::{Engine as _, engine::general_purpose};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use thiserror::Error;
 use regex::Regex;
-use scraper;
 use scraper::ElementRef;
 
 use std::sync::LazyLock;
@@ -69,11 +67,11 @@ pub(super) struct PlayerScript(String);
 #[derive(Debug, Error)]
 pub(super) enum VideoParamsError {
     #[error("vInfo.hash not found")]
-    NoHash,
+    Hash,
     #[error("vInfo.id not found")]
-    NoId,
+    Id,
     #[error("vInfo.type not found")]
-    NoType,
+    Type,
 }
 
 fn parse_vinfo_assignment(line: &str) -> Option<(&str, &str)> {
@@ -110,9 +108,9 @@ impl PlayerScript {
         }
 
         Ok(VideoParams {
-            hash: hash.ok_or(VideoParamsError::NoHash)?.to_owned(),
-            id: id.ok_or(VideoParamsError::NoId)?.to_owned(),
-            video_type: video_type.ok_or(VideoParamsError::NoType)?.to_owned(),
+            hash: hash.ok_or(VideoParamsError::Hash)?.to_owned(),
+            id: id.ok_or(VideoParamsError::Id)?.to_owned(),
+            video_type: video_type.ok_or(VideoParamsError::Type)?.to_owned(),
         })
     }
 }

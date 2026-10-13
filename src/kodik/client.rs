@@ -1,6 +1,5 @@
 use anyhow::{self, Context};
 use reqwest::{Client, IntoUrl};
-use scraper;
 use scraper::{Html, Selector};
 use std::sync::LazyLock;
 use thiserror::Error;

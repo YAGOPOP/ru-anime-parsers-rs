@@ -126,15 +126,15 @@ impl LinksResponse {
     pub(super) fn decrypt(self, caesar_shift: u8) -> KodikManifestLinks {
         let quality_360p = self
             .quality_360p
-            .get(0)
+            .first()
             .and_then(|l| l.decrypt(caesar_shift).ok());
         let quality_480p = self
             .quality_480p
-            .get(0)
+            .first()
             .and_then(|l| l.decrypt(caesar_shift).ok());
         let quality_720p = self
             .quality_720p
-            .get(0)
+            .first()
             .and_then(|l| l.decrypt(caesar_shift).ok());
         KodikManifestLinks {
             quality_360p,

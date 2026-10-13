@@ -145,7 +145,7 @@ impl From<&str> for ChapterKind {
     }
 }
 
-impl<'a> RawChapters<'_> {
+impl RawChapters<'_> {
     /// # Parses chapters independently, preserving successfully parsed ones.
     ///
     /// Invalid chapters are silently skipped rather than causing the entire
