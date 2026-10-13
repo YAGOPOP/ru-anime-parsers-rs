@@ -146,6 +146,10 @@ impl From<&str> for ChapterKind {
 }
 
 impl<'a> RawChapters<'_> {
+    /// # Parses chapters independently, preserving successfully parsed ones.
+    ///
+    /// Invalid chapters are silently skipped rather than causing the entire
+    /// parsing operation to fail. The resulting chapters are sorted by start time.
     pub(super) fn parse(self) -> Chapters {
         let mut chapters = self
             .chapters
