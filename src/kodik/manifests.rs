@@ -78,6 +78,8 @@ fn is_manifest_link(value: &str) -> bool {
     value.contains("mp4:hls:manifest")
 }
 
+// todo: instead of Option<KodikManifestLink> store Result<KodikManifestLink, KodikManifestLinkError>
+// to differensiate missing link in response, failed decryption and etc.
 #[derive(Debug)]
 pub struct KodikManifestLinks {
     quality_360p: Option<KodikManifestLink>,
@@ -113,6 +115,13 @@ pub enum KodikManifestLinkError {
     InvalidUtf8(#[from] std::string::FromUtf8Error),
 }
 
+/// Decrypts manifest links for each available quality independently.
+///
+/// Uses only the first link for each quality. If a link is missing or
+/// decryption fails, the corresponding quality is set to `None`.
+///
+/// Failures are intentionally ignored to preserve successfully
+/// decrypted links for other qualities.
 impl LinksResponse {
     pub(super) fn decrypt(self, caesar_shift: u8) -> KodikManifestLinks {
         let quality_360p = self
